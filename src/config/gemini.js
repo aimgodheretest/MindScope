@@ -8,44 +8,33 @@ import { GoogleGenAI } from "@google/genai";
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY; // Replace with your actual key
 
 async function runChat(prompt, onChunk) {
-  const ai = new GoogleGenAI({
-    apiKey: GEMINI_API_KEY,
-  });
+  try {
+    const ai = new GoogleGenAI({
+      apiKey: GEMINI_API_KEY,
+    });
 
-  const tools = [
-    {
-      googleSearch: {},
-    },
-  ];
+    const response = await ai.models.generateContentStream({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+    });
 
-  const config = {
-    thinkingConfig: {
-      thinkingBudget: -1,
-    },
-    tools,
-  };
+    for await (const chunk of response) {
+      const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-  const model = "gemini-2.5-pro";
+      if (text) onChunk(text);
+    }
+  } catch (err) {
+    console.error(err);
 
-  const contents = [
-    {
-      role: "user",
-      parts: [{ text: prompt }],
-    },
-  ];
-
-  const response = await ai.models.generateContentStream({
-    model,
-    config,
-    contents,
-  });
-
-  for await (const chunk of response) {
-    // Extract text from the streaming chunk safely
-    const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-    if (text) {
-      onChunk(text); // send to UI
+    if (err.status === 429) {
+      onChunk("⚠️ API quota exceeded. Please try again later.");
+    } else {
+      onChunk("⚠️ Something went wrong.");
     }
   }
 }
